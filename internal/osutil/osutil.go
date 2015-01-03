@@ -19,6 +19,7 @@ package osutil
 import (
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -67,13 +68,25 @@ func Rename(from, to string) error {
 func InWritableDir(fn func(string) error, path string) error {
 	dir := filepath.Dir(path)
 	if info, err := os.Stat(dir); err == nil && info.IsDir() && info.Mode()&0200 == 0 {
+		oldMode := info.Mode()
+		if oldMode&0777 == 0 {
+			// Zero permission bits on a directory we are trying to do
+			// something in?
+			log.Println(path)
+			log.Println(dir)
+			log.Println(err)
+			log.Println(info)
+			log.Println(oldMode)
+			panic("Got zero permission bits from stat")
+		}
+
 		// A non-writeable directory (for this user; we assume that's the
 		// relevant part). Temporarily change the mode so we can delete the
 		// file or directory inside it.
 		err = os.Chmod(dir, 0755)
 		if err == nil {
 			defer func() {
-				err = os.Chmod(dir, info.Mode())
+				err = os.Chmod(dir, oldMode)
 				if err != nil {
 					// We managed to change the permission bits like a
 					// millisecond ago, so it'd be bizarre if we couldn't
